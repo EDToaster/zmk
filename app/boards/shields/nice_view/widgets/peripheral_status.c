@@ -56,7 +56,6 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
-
 }
 
 static void set_battery_status(struct zmk_widget_status *widget,
@@ -99,9 +98,7 @@ static struct peripheral_status_state get_state(const zmk_event_t *_eh) {
 static void set_connection_status(struct zmk_widget_status *widget,
                                   struct peripheral_status_state state) {
     widget->state.connected = state.connected;
-
     draw_top(widget->obj, widget->cbuf, &widget->state);
-    
 }
 
 static void output_status_update_cb(struct peripheral_status_state state) {
@@ -113,38 +110,33 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_peripheral_status, struct peripheral_status_s
                             output_status_update_cb, get_state)
 ZMK_SUBSCRIPTION(widget_peripheral_status, zmk_split_peripheral_status_changed);
 
-
 // ART
+#define ART_FLIP_PERIOD_MS 500
 
-bool frame_state = false;
+static struct k_work_delayable art_flip_work;
+static bool art_frame_state = false;
+static bool art_flipping = false;
 
-static void draw_art(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    frame_state = !frame_state;
+static void redraw_art(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *art = lv_obj_get_child(widget, 1);
-    lv_img_set_src(art, frame_state ? &frame1 : &frame2);
+    lv_img_set_src(art, art_frame_state ? &frame1 : &frame2);
 
     // Rotate canvas
     rotate_canvas(art, cbuf);
 }
 
-
-static struct art_state get_art_state(const zmk_event_t *_eh) {
-    return (struct art_state){.frame = frame_state};
-}
-
-static void set_art_state(struct zmk_widget_status *widget,
-                                  struct art_state state) {
-    draw_art(widget->obj, widget->cbuf, &widget->state);
-}
-
-static void art_update_cb(struct art_state state) {
+static void art_flip_work_handler(struct k_work *work) {
+    art_frame_state = !art_frame_state;
     struct zmk_widget_status *widget;
-    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) { set_art_state(widget, state); }
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
+        /* Call draw_art to toggle the image for the art widget.
+         * This reuses the existing draw_art() function.
+         */
+        redraw_art(widget->obj, widget->cbuf, &widget->state);
+    }
+    /* Reschedule the work to run again after ART_FLIP_PERIOD_MS */
+    k_work_schedule(&art_flip_work, K_MSEC(ART_FLIP_PERIOD_MS));
 }
-
-ZMK_DISPLAY_WIDGET_LISTENER(widget_art, struct art_state,
-                            art_update_cb, get_art_state)
-ZMK_SUBSCRIPTION(widget_art, zmk_split_peripheral_status_changed);
 
 int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
@@ -154,13 +146,19 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     lv_obj_t *art = lv_img_create(widget->obj);
-    lv_img_set_src(art, &frame1);
+    // lv_img_set_src(art, &frame1);
     lv_obj_align(art, LV_ALIGN_TOP_LEFT, 0, 0);
 
     sys_slist_append(&widgets, &widget->node);
     widget_battery_status_init();
     widget_peripheral_status_init();
 
+    // setup
+    if (!art_flipping) {
+        k_work_init_delayable(&art_flip_work, art_flip_work_handler);
+        k_work_schedule(&art_flip_work, K_MSEC(ART_FLIP_PERIOD_MS));
+        art_flipping = true;
+    }
     return 0;
 }
 
