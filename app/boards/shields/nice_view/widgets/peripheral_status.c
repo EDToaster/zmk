@@ -132,9 +132,7 @@ static struct art_state get_art_state(const zmk_event_t *_eh) {
 
 static void set_art_state(struct zmk_widget_status *widget,
                                   struct art_state state) {
-    widget->state.connected = state.connected;
-
-    draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_art(widget->obj, widget->cbuf, &widget->state);
 }
 
 static void art_update_cb(struct art_state state) {
