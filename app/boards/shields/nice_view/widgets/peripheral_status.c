@@ -57,11 +57,6 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
 
-    lv_obj_t *art = lv_obj_get_child(widget, 1);
-    lv_img_set_src(art, state->connected ? &frame1 : &frame2);
-
-    // Rotate canvas
-    rotate_canvas(art, cbuf);
 }
 
 static void set_battery_status(struct zmk_widget_status *widget,
@@ -125,6 +120,11 @@ bool frame_state = false;
 
 static void draw_art(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     frame_state = !frame_state;
+    lv_obj_t *art = lv_obj_get_child(widget, 1);
+    lv_img_set_src(art, state->connected ? &frame1 : &frame2);
+
+    // Rotate canvas
+    rotate_canvas(art, cbuf);
 }
 
 
