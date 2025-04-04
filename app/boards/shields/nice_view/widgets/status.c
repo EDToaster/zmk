@@ -35,6 +35,11 @@ struct output_status_state {
     bool active_profile_bonded;
 };
 
+struct layer_status_state {
+    zmk_keymap_layer_index_t index;
+    const char *label;
+};
+
 struct wpm_status_state {
     uint8_t wpm;
 };
@@ -162,6 +167,32 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     rotate_canvas(canvas, cbuf);
 }
 
+static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
+    lv_obj_t *canvas = lv_obj_get_child(widget, 2);
+
+    lv_draw_rect_dsc_t rect_black_dsc;
+    init_rect_dsc(&rect_black_dsc, LVGL_BACKGROUND);
+    lv_draw_label_dsc_t label_dsc;
+    init_label_dsc(&label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_CENTER);
+
+    // Fill background
+    lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &rect_black_dsc);
+
+    // Draw layer
+    if (state->layer_label == NULL || strlen(state->layer_label) == 0) {
+        char text[10] = {};
+
+        sprintf(text, "LAYER %i", state->layer_index);
+
+        lv_canvas_draw_text(canvas, 0, 5, 68, &label_dsc, text);
+    } else {
+        lv_canvas_draw_text(canvas, 0, 5, 68, &label_dsc, state->layer_label);
+    }
+
+    // Rotate canvas
+    rotate_canvas(canvas, cbuf);
+}
+
 static void set_battery_status(struct zmk_widget_status *widget,
                                struct battery_status_state state) {
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
@@ -233,6 +264,29 @@ ZMK_SUBSCRIPTION(widget_output_status, zmk_usb_conn_state_changed);
 ZMK_SUBSCRIPTION(widget_output_status, zmk_ble_active_profile_changed);
 #endif
 
+static void set_layer_status(struct zmk_widget_status *widget, struct layer_status_state state) {
+    widget->state.layer_index = state.index;
+    widget->state.layer_label = state.label;
+
+    draw_bottom(widget->obj, widget->cbuf3, &widget->state);
+}
+
+static void layer_status_update_cb(struct layer_status_state state) {
+    struct zmk_widget_status *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) { set_layer_status(widget, state); }
+}
+
+static struct layer_status_state layer_status_get_state(const zmk_event_t *eh) {
+    zmk_keymap_layer_index_t index = zmk_keymap_highest_layer_active();
+    return (struct layer_status_state){
+        .index = index, .label = zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(index))};
+}
+
+ZMK_DISPLAY_WIDGET_LISTENER(widget_layer_status, struct layer_status_state, layer_status_update_cb,
+                            layer_status_get_state)
+
+ZMK_SUBSCRIPTION(widget_layer_status, zmk_layer_state_changed);
+
 static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_state state) {
     for (int i = 0; i < 9; i++) {
         widget->state.wpm[i] = widget->state.wpm[i + 1];
@@ -255,37 +309,6 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_wpm_status, struct wpm_status_state, wpm_stat
                             wpm_status_get_state)
 ZMK_SUBSCRIPTION(widget_wpm_status, zmk_wpm_state_changed);
 
-// ART
-LV_IMG_DECLARE(b1small);
-LV_IMG_DECLARE(b2small);
-
-#define ART_FLIP_PERIOD_MS 200
-
-static struct k_work_delayable art_flip_work;
-static bool art_frame_state = false;
-static bool art_flipping = false;
-
-static void redraw_art(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *art = lv_obj_get_child(widget, 2);
-    lv_img_set_src(art, art_frame_state ? &b1small : &b2small);
-
-    // Rotate canvas
-    rotate_canvas(art, cbuf);
-}
-
-static void art_flip_work_handler(struct k_work *work) {
-    art_frame_state = !art_frame_state;
-    struct zmk_widget_status *widget;
-    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        /* Call draw_art to toggle the image for the art widget.
-         * This reuses the existing draw_art() function.
-         */
-        redraw_art(widget->obj, widget->cbuf, &widget->state);
-    }
-    /* Reschedule the work to run again after ART_FLIP_PERIOD_MS */
-    k_work_schedule(&art_flip_work, K_MSEC(ART_FLIP_PERIOD_MS));
-}
-
 int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, 160, 68);
@@ -295,22 +318,15 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_t *middle = lv_canvas_create(widget->obj);
     lv_obj_align(middle, LV_ALIGN_TOP_LEFT, 24, 0);
     lv_canvas_set_buffer(middle, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
-
-    // art
-    lv_obj_t *bottom = lv_img_create(widget->obj);
-    lv_obj_align(bottom, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_t *bottom = lv_canvas_create(widget->obj);
+    lv_obj_align(bottom, LV_ALIGN_TOP_LEFT, -44, 0);
+    lv_canvas_set_buffer(bottom, widget->cbuf3, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     sys_slist_append(&widgets, &widget->node);
     widget_battery_status_init();
     widget_output_status_init();
+    widget_layer_status_init();
     widget_wpm_status_init();
-
-    // setup
-    if (!art_flipping) {
-        k_work_init_delayable(&art_flip_work, art_flip_work_handler);
-        k_work_schedule(&art_flip_work, K_MSEC(ART_FLIP_PERIOD_MS));
-        art_flipping = true;
-    }
 
     return 0;
 }

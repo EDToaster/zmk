@@ -32,6 +32,10 @@ struct peripheral_status_state {
     bool connected;
 };
 
+struct art_state {
+    bool frame;
+};
+
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
 
@@ -107,7 +111,7 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_peripheral_status, struct peripheral_status_s
 ZMK_SUBSCRIPTION(widget_peripheral_status, zmk_split_peripheral_status_changed);
 
 // ART
-#define ART_FLIP_PERIOD_MS 1000
+#define ART_FLIP_PERIOD_MS 500
 
 static struct k_work_delayable art_flip_work;
 static bool art_frame_state = false;
@@ -142,6 +146,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     lv_obj_t *art = lv_img_create(widget->obj);
+    // lv_img_set_src(art, &frame1);
     lv_obj_align(art, LV_ALIGN_TOP_LEFT, 0, 0);
 
     sys_slist_append(&widgets, &widget->node);
