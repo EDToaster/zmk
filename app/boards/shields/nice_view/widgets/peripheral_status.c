@@ -56,6 +56,12 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
+
+    lv_obj_t *art = lv_obj_get_child(widget, 1);
+    lv_img_set_src(art, state->connected ? &frame1 : &frame2);
+
+    // Rotate canvas
+    rotate_canvas(art, cbuf);
 }
 
 static void set_battery_status(struct zmk_widget_status *widget,
@@ -100,6 +106,7 @@ static void set_connection_status(struct zmk_widget_status *widget,
     widget->state.connected = state.connected;
 
     draw_top(widget->obj, widget->cbuf, &widget->state);
+    
 }
 
 static void output_status_update_cb(struct peripheral_status_state state) {
@@ -118,11 +125,6 @@ bool frame_state = false;
 
 static void draw_art(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     frame_state = !frame_state;
-    lv_obj_t *art = lv_obj_get_child(widget, 1);
-    lv_img_set_src(art, frame_state ? &frame1 : &frame2);
-
-    // Rotate canvas
-    rotate_canvas(art, cbuf);
 }
 
 
@@ -143,8 +145,6 @@ static void art_update_cb(struct art_state state) {
 ZMK_DISPLAY_WIDGET_LISTENER(widget_art, struct art_state,
                             art_update_cb, get_art_state)
 ZMK_SUBSCRIPTION(widget_art, zmk_split_peripheral_status_changed);
-
-
 
 int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
