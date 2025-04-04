@@ -32,8 +32,12 @@ struct peripheral_status_state {
     bool connected;
 };
 
+struct art_state {
+    bool frame;
+};
+
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 0);
+    lv_obj_t *canvas = lv_obj_get_child(widget, 0)
 
     lv_draw_label_dsc_t label_dsc;
     init_label_dsc(&label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
@@ -106,6 +110,43 @@ static void output_status_update_cb(struct peripheral_status_state state) {
 ZMK_DISPLAY_WIDGET_LISTENER(widget_peripheral_status, struct peripheral_status_state,
                             output_status_update_cb, get_state)
 ZMK_SUBSCRIPTION(widget_peripheral_status, zmk_split_peripheral_status_changed);
+
+
+// ART
+
+bool frame_state = false;
+
+static void draw_art(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
+    lv_obj_t *art = lv_obj_get_child(widget, 1)
+    lv_img_set_src(art, frame_state ? &frame1 : &frame2);
+
+    // Rotate canvas
+    rotate_canvas(canvas, cbuf);
+}
+
+
+static struct art_state get_art_state(const zmk_event_t *_eh) {
+    frame_state = !frame_state;
+    return (struct art_state){.frame = frame_state};
+}
+
+static void set_art_state(struct zmk_widget_status *widget,
+                                  struct art_state state) {
+    widget->state.connected = state.connected;
+
+    draw_top(widget->obj, widget->cbuf, &widget->state);
+}
+
+static void art_update_cb(struct art_state state) {
+    struct zmk_widget_status *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) { set_art_state(widget, state); }
+}
+
+ZMK_DISPLAY_WIDGET_LISTENER(widget_art, struct art_state,
+                            art_update_cb, get_art_state)
+ZMK_SUBSCRIPTION(widget_art, zmk_split_peripheral_status_changed);
+
+
 
 int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
