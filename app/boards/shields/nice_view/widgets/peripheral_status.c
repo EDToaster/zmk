@@ -117,6 +117,7 @@ ZMK_SUBSCRIPTION(widget_peripheral_status, zmk_split_peripheral_status_changed);
 bool frame_state = false;
 
 static void draw_art(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
+    frame_state = !frame_state;
     lv_obj_t *art = lv_obj_get_child(widget, 1);
     lv_img_set_src(art, frame_state ? &frame1 : &frame2);
 
@@ -126,7 +127,6 @@ static void draw_art(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 
 
 static struct art_state get_art_state(const zmk_event_t *_eh) {
-    frame_state = !frame_state;
     return (struct art_state){.frame = frame_state};
 }
 
